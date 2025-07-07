@@ -1,11 +1,12 @@
 
 #include <algorithm>
+#include <cstring>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <cstring>
+#include <fstream>
 
 using namespace std;
 
@@ -19,11 +20,12 @@ public:
   tm tanggalGadai;
   tm tanggalJatuhTempo;
   double bungaPerHari;
+  int stock;
 
   Barang(string np, string n, string nt, string s, double h, tm tg, tm tj,
-         double b)
+         double b, int st = 5)
       : namaPenggadai(np), nama(n), nomorTransaksi(nt), status(s), harga(h),
-        tanggalGadai(tg), tanggalJatuhTempo(tj), bungaPerHari(b) {}
+        tanggalGadai(tg), tanggalJatuhTempo(tj), bungaPerHari(b), stock(st) {}
 
   double hitungBunga() {
     time_t tGadai = mktime(&tanggalGadai);
@@ -38,72 +40,29 @@ private:
   vector<Barang> barang;
 
 public:
-  // Linear Search - mencari barang berdasarkan nama
-  int linearSearchByName(const string &namaBarang) {
-    cout << "\n=== LINEAR SEARCH ===\n";
-    cout << "Mencari barang dengan nama: " << namaBarang << "\n";
-
-    for (int i = 0; i < (int)barang.size(); i++) {
-      cout << "Langkah " << (i + 1) << ": Membandingkan '" << barang[i].nama
-           << "' dengan '" << namaBarang << "'\n";
-
-      if (barang[i].nama == namaBarang) {
-        cout << "DITEMUKAN! Barang '" << namaBarang
-             << "' ditemukan pada indeks " << i << "\n";
-        return i; // Return index jika ditemukan
-      }
-    }
-
-    cout << "TIDAK DITEMUKAN! Barang '" << namaBarang
-         << "' tidak ada dalam database.\n";
-    return -1; // Return -1 jika tidak ditemukan
-  }
-
-  // Binary Search - mencari barang berdasarkan nomor transaksi (harus diurutkan
-  // dulu)
+  // Binary Search - mencari barang berdasarkan nomor transaksi (tanpa proses detail)
   int binarySearchByTransactionNumber(const string &nomorTransaksi) {
-    cout << "\n=== BINARY SEARCH ===\n";
-    cout << "Mencari barang dengan nomor transaksi: " << nomorTransaksi << "\n";
-
-    // Pertama, urutkan array berdasarkan nomor transaksi
     vector<pair<string, int> > sortedTransactions;
     for (int i = 0; i < (int)barang.size(); i++) {
-      sortedTransactions.push_back(make_pair(barang[i].nomorTransaksi, i));
+      sortedTransactions.push_back(pair<string, int>(barang[i].nomorTransaksi, i));
     }
     sort(sortedTransactions.begin(), sortedTransactions.end());
 
-    cout << "Data sudah diurutkan berdasarkan nomor transaksi.\n";
-
     int left = 0;
     int right = (int)sortedTransactions.size() - 1;
-    int step = 1;
 
     while (left <= right) {
       int mid = left + (right - left) / 2;
       string midTransaction = sortedTransactions[mid].first;
 
-      cout << "Langkah " << step << ": left=" << left << ", right=" << right
-           << ", mid=" << mid << " ('" << midTransaction << "')\n";
-
       if (midTransaction == nomorTransaksi) {
-        cout << "DITEMUKAN! Nomor transaksi '" << nomorTransaksi
-             << "' ditemukan pada indeks asli "
-             << sortedTransactions[mid].second << "\n";
-        return sortedTransactions[mid].second; // Return indeks asli
+        return sortedTransactions[mid].second;
       } else if (midTransaction < nomorTransaksi) {
-        cout << "'" << midTransaction << "' < '" << nomorTransaksi
-             << "' -> Cari di bagian kanan\n";
         left = mid + 1;
       } else {
-        cout << "'" << midTransaction << "' > '" << nomorTransaksi
-             << "' -> Cari di bagian kiri\n";
         right = mid - 1;
       }
-      step++;
     }
-
-    cout << "TIDAK DITEMUKAN! Nomor transaksi '" << nomorTransaksi
-         << "' tidak ada dalam database.\n";
     return -1;
   }
 
@@ -116,6 +75,7 @@ public:
       cout << "Nama Barang  : " << b.nama << "\n";
       cout << "No. Transaksi: " << b.nomorTransaksi << "\n";
       cout << "Status       : " << b.status << "\n";
+      cout << "Stock        : " << b.stock << "\n";
       cout << "Harga        : Rp " << fixed << setprecision(2) << b.harga
            << "\n";
 
@@ -131,65 +91,181 @@ public:
       cout << "===============================\n";
     }
   }
-  void tambahBarang(const Barang &b) { barang.push_back(b); }
+
+  // Fungsi untuk menampilkan stock yang kurang dari 3
+  void tampilkanStockKurang() {
+    cout << "\n========================================\n";
+    cout << "        BARANG DENGAN STOCK < 3        \n";
+    cout << "========================================\n\n";
+
+    cout << left << setw(20) << "Nama Barang" 
+         << setw(15) << "No. Transaksi" 
+         << setw(10) << "Stock" 
+         << setw(12) << "Status" << endl;
+    cout << string(57, '=') << endl;
+
+    bool adaBarangKurang = false;
+    for (int i = 0; i < (int)barang.size(); i++) {
+      if (barang[i].stock < 3) {
+        adaBarangKurang = true;
+        cout << left << setw(20) << barang[i].nama
+             << setw(15) << barang[i].nomorTransaksi
+             << setw(10) << barang[i].stock
+             << setw(12) << barang[i].status << endl;
+      }
+    }
+
+    if (!adaBarangKurang) {
+      cout << "\nSemua barang memiliki stock >= 3.\n";
+    }
+  }
+
+  // Sorting berdasarkan tanggal jatuh tempo (yang terdekat/sudah lewat)
+  void sortingByJatuhTempo() {
+    vector<pair<time_t, int> > tempoWithIndex;
+    time_t sekarang = time(NULL);
+    
+    for (int i = 0; i < (int)barang.size(); i++) {
+      time_t tJatuhTempo = mktime(&barang[i].tanggalJatuhTempo);
+      tempoWithIndex.push_back(pair<time_t, int>(tJatuhTempo, i));
+    }
+
+    // Sort berdasarkan tanggal jatuh tempo
+    sort(tempoWithIndex.begin(), tempoWithIndex.end());
+
+    cout << "\n=== SORTING BERDASARKAN TANGGAL JATUH TEMPO ===\n";
+    cout << left << setw(20) << "Nama Barang" 
+         << setw(15) << "No. Transaksi" 
+         << setw(15) << "Tgl J. Tempo" 
+         << setw(12) << "Status" << endl;
+    cout << string(62, '=') << endl;
+
+    for (int k = 0; k < (int)tempoWithIndex.size(); k++) {
+      pair<time_t, int> item = tempoWithIndex[k];
+      Barang &b = barang[item.second];
+      char bufferTempo[20];
+      tm tempTm = b.tanggalJatuhTempo;
+      strftime(bufferTempo, sizeof(bufferTempo), "%d-%m-%Y", &tempTm);
+      
+      // Tandai jika sudah jatuh tempo
+      string statusTempo = (item.first <= sekarang) ? " (LEWAT)" : "";
+      
+      cout << left << setw(20) << b.nama
+           << setw(15) << b.nomorTransaksi
+           << setw(15) << (string(bufferTempo) + statusTempo)
+           << setw(12) << b.status << endl;
+    }
+  }
+
+  // Fungsi hapus data berdasarkan nomor transaksi
+  bool hapusBarangByTransaksi(const string &nomorTransaksi) {
+    for (int i = 0; i < (int)barang.size(); i++) {
+      if (barang[i].nomorTransaksi == nomorTransaksi) {
+        cout << "Menghapus barang: " << barang[i].nama 
+             << " (No. Transaksi: " << nomorTransaksi << ")\n";
+        barang.erase(barang.begin() + i);
+        simpanKeFile(); // Otomatis simpan setelah hapus
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Simpan semua data ke file txt
+  void simpanKeFile() {
+    ofstream file("data_barang.txt");
+    if (file.is_open()) {
+      file << "=== DATA BARANG PT. AHMAD DAHLAN ===\n\n";
+      
+      for (int i = 0; i < (int)barang.size(); i++) {
+        Barang &b = barang[i];
+        char bufferGadai[20], bufferTempo[20];
+        strftime(bufferGadai, sizeof(bufferGadai), "%d-%m-%Y", &b.tanggalGadai);
+        strftime(bufferTempo, sizeof(bufferTempo), "%d-%m-%Y", &b.tanggalJatuhTempo);
+
+        file << "Penggadai    : " << b.namaPenggadai << "\n";
+        file << "Nama Barang  : " << b.nama << "\n";
+        file << "No. Transaksi: " << b.nomorTransaksi << "\n";
+        file << "Status       : " << b.status << "\n";
+        file << "Stock        : " << b.stock << "\n";
+        file << "Harga        : Rp " << fixed << setprecision(2) << b.harga << "\n";
+        file << "Tgl Gadai    : " << bufferGadai << "\n";
+        file << "Tgl J. Tempo : " << bufferTempo << "\n";
+        file << "Bunga        : Rp " << fixed << setprecision(2) << b.hitungBunga() << "\n";
+        file << "--------------------------------\n\n";
+      }
+      
+      file.close();
+      cout << "Data berhasil disimpan ke file 'data_barang.txt'\n";
+    } else {
+      cout << "Error: Tidak dapat membuat file!\n";
+    }
+  }
+
+  void tambahBarang(const Barang &b) { 
+    barang.push_back(b); 
+    simpanKeFile(); // Otomatis simpan setelah tambah
+  }
 
   void tampilkanBarang() {
-    cout << "\n================================================================"
-            "==============\n";
-    cout << "                                 PT. Ahmad Dahlan                 "
-            "              \n";
-    cout << "                          Daftar Barang yang Ada di Gudang        "
-            "              \n";
-    cout << "=================================================================="
-            "==============\n\n";
+    cout << "\n" << string(100, '=') << "\n";
+    cout << setw(50) << "PT. Ahmad Dahlan" << "\n";
+    cout << setw(55) << "Daftar Barang yang Ada di Gudang" << "\n";
+    cout << string(100, '=') << "\n\n";
 
-    cout << left << setw(15) << "Penggadai" << setw(20) << "Nama Barang"
-         << setw(20) << "No. Transaksi" << setw(12) << "Status" << setw(15)
-         << "Harga" << setw(15) << "Tgl Gadai" << setw(20) << "Tgl Jatuh Tempo"
-         << setw(12) << "Bunga" << endl;
+    cout << left << setw(20) << "Penggadai" 
+         << setw(20) << "Nama Barang"
+         << setw(15) << "No. Transaksi" 
+         << setw(12) << "Status" 
+         << setw(8) << "Stock"
+         << setw(12) << "Harga" 
+         << setw(12) << "Tgl Tempo" << endl;
 
-    cout << string(129, '=') << endl;
+    cout << string(99, '=') << endl;
 
     bool adaBarang = false;
     for (int i = 0; i < (int)barang.size(); i++) {
-      Barang b = barang[i];
+      Barang &b = barang[i];
       if (b.status == "Di Gudang") {
         adaBarang = true;
 
-        char bufferGadai[20], bufferTempo[20];
-        strftime(bufferGadai, sizeof(bufferGadai), "%d-%m-%Y", &b.tanggalGadai);
-        strftime(bufferTempo, sizeof(bufferTempo), "%d-%m-%Y",
-                 &b.tanggalJatuhTempo);
+        char bufferTempo[20];
+        strftime(bufferTempo, sizeof(bufferTempo), "%d-%m-%Y", &b.tanggalJatuhTempo);
 
-        cout << left << setw(15) << b.namaPenggadai << setw(20) << b.nama
-             << setw(20) << b.nomorTransaksi << setw(12) << b.status << setw(15)
-             << fixed << setprecision(2) << b.harga << setw(15)
-             << bufferGadai << setw(20) << bufferTempo << setw(12) << fixed
-             << setprecision(2) << b.hitungBunga() << endl;
+        cout << left << setw(20) << b.namaPenggadai.substr(0, 19)
+             << setw(20) << b.nama.substr(0, 19)
+             << setw(15) << b.nomorTransaksi
+             << setw(12) << b.status
+             << setw(8) << b.stock
+             << setw(12) << fixed << setprecision(0) << b.harga
+             << setw(12) << bufferTempo << endl;
       }
     }
 
     if (!adaBarang) {
       cout << "\nTidak ada barang dengan status 'Di Gudang'.\n";
     }
+    cout << string(99, '=') << endl;
   }
 
   void tampilkanBarangKeluar() {
-    cout << "\n===============================================\n";
-    cout << "              PT. Ahmad Dahlan                 \n";
-    cout << "             Barang yang Sudah Keluar          \n";
-    cout << "===============================================\n\n";
+    cout << "\n" << string(60, '=') << "\n";
+    cout << setw(30) << "PT. Ahmad Dahlan" << "\n";
+    cout << setw(35) << "Barang yang Sudah Keluar" << "\n";
+    cout << string(60, '=') << "\n\n";
 
-    cout << left << setw(25) << "Nama Barang" << setw(20) << "No. Transaksi"
+    cout << left << setw(25) << "Nama Barang" 
+         << setw(20) << "No. Transaksi"
          << setw(12) << "Status" << endl;
-    cout << string(60, '=') << endl;
+    cout << string(57, '=') << endl;
 
     bool adaBarang = false;
     for (int i = 0; i < (int)barang.size(); i++) {
-      Barang b = barang[i];
+      Barang &b = barang[i];
       if (b.status == "Keluar") {
         adaBarang = true;
-        cout << left << setw(25) << b.nama << setw(20) << b.nomorTransaksi
+        cout << left << setw(25) << b.nama.substr(0, 24)
+             << setw(20) << b.nomorTransaksi
              << setw(12) << b.status << endl;
       }
     }
@@ -202,25 +278,103 @@ public:
   }
 
   void tampilkanHargaBarang() {
-    cout << "\n===============================================\n";
-    cout << "              PT. Ahmad Dahlan                 \n";
-    cout << "             Daftar Harga Barang              \n";
-    cout << "===============================================\n\n";
+    cout << "\n" << string(50, '=') << "\n";
+    cout << setw(25) << "PT. Ahmad Dahlan" << "\n";
+    cout << setw(30) << "Daftar Harga Barang" << "\n";
+    cout << string(50, '=') << "\n\n";
 
-    cout << left << setw(25) << "Nama Barang" << setw(15) << "Harga" << endl;
-    cout << string(40, '=') << endl;
+    cout << left << setw(25) << "Nama Barang" 
+         << setw(15) << "Harga" 
+         << setw(8) << "Stock" << endl;
+    cout << string(48, '=') << endl;
 
     for (int i = 0; i < (int)barang.size(); i++) {
-      Barang b = barang[i];
-      cout << left << setw(25) << b.nama << setw(15) << fixed << setprecision(2)
-           << b.harga << endl;
+      Barang &b = barang[i];
+      cout << left << setw(25) << b.nama.substr(0, 24)
+           << setw(15) << fixed << setprecision(2) << b.harga
+           << setw(8) << b.stock << endl;
+    }
+    
+    // Menu sorting harga
+    cout << "\n" << string(50, '=') << "\n";
+    cout << "Pilih urutan harga:\n";
+    cout << "1. Urutkan dari harga terbesar\n";
+    cout << "2. Urutkan dari harga terkecil\n";
+    cout << "0. Kembali ke menu utama\n";
+    cout << "Pilihan: ";
+    
+    int pilihan;
+    cin >> pilihan;
+    
+    if (pilihan == 1) {
+      urutkanHargaTerbesar();
+    } else if (pilihan == 2) {
+      urutkanHargaTerkecil();
+    }
+  }
+
+  void urutkanHargaTerbesar() {
+    // Buat vector untuk menyimpan index dan harga
+    vector<pair<double, int> > hargaWithIndex;
+    for (int i = 0; i < (int)barang.size(); i++) {
+      hargaWithIndex.push_back(pair<double, int>(barang[i].harga, i));
+    }
+    
+    // Sort dari harga terbesar ke terkecil
+    sort(hargaWithIndex.begin(), hargaWithIndex.end());
+    
+    cout << "\n" << string(50, '=') << "\n";
+    cout << setw(25) << "PT. Ahmad Dahlan" << "\n";
+    cout << setw(35) << "Harga Barang (Terbesar ke Terkecil)" << "\n";
+    cout << string(50, '=') << "\n\n";
+    
+    cout << left << setw(25) << "Nama Barang" 
+         << setw(15) << "Harga" 
+         << setw(8) << "Stock" << endl;
+    cout << string(48, '=') << endl;
+    
+    // Tampilkan dari index terakhir (terbesar) ke pertama (terkecil)
+    for (int i = (int)hargaWithIndex.size() - 1; i >= 0; i--) {
+      Barang &b = barang[hargaWithIndex[i].second];
+      cout << left << setw(25) << b.nama.substr(0, 24)
+           << setw(15) << fixed << setprecision(2) << b.harga
+           << setw(8) << b.stock << endl;
+    }
+  }
+
+  void urutkanHargaTerkecil() {
+    // Buat vector untuk menyimpan index dan harga
+    vector<pair<double, int> > hargaWithIndex;
+    for (int i = 0; i < (int)barang.size(); i++) {
+      hargaWithIndex.push_back(pair<double, int>(barang[i].harga, i));
+    }
+    
+    // Sort dari harga terkecil ke terbesar
+    sort(hargaWithIndex.begin(), hargaWithIndex.end());
+    
+    cout << "\n" << string(50, '=') << "\n";
+    cout << setw(25) << "PT. Ahmad Dahlan" << "\n";
+    cout << setw(35) << "Harga Barang (Terkecil ke Terbesar)" << "\n";
+    cout << string(50, '=') << "\n\n";
+    
+    cout << left << setw(25) << "Nama Barang" 
+         << setw(15) << "Harga" 
+         << setw(8) << "Stock" << endl;
+    cout << string(48, '=') << endl;
+    
+    // Tampilkan dari index pertama (terkecil) ke terakhir (terbesar)
+    for (int i = 0; i < (int)hargaWithIndex.size(); i++) {
+      Barang &b = barang[hargaWithIndex[i].second];
+      cout << left << setw(25) << b.nama.substr(0, 24)
+           << setw(15) << fixed << setprecision(2) << b.harga
+           << setw(8) << b.stock << endl;
     }
   }
 
   void pilihJenisPembayaran() {
     int pilihan;
     int pilih;
-    cout << "Pilih jenis pembayaran:\n1. Tunai\n2. Transfer\n3. "
+    cout << "\nPilih jenis pembayaran:\n1. Tunai\n2. Transfer\n3. "
             "Lainnya\nPilihan: ";
     cin >> pilihan;
     switch (pilihan) {
@@ -255,6 +409,7 @@ public:
     string status;
     float harga;
     float bunga;
+    int stock;
     int tg;
     int tbulan;
     int ty;
@@ -271,6 +426,8 @@ public:
     getline(cin, nomorTransaksi);
     cout << "Masukkan Status (Di Gudang/Keluar): ";
     getline(cin, status);
+    cout << "Masukkan Stock Barang: ";
+    cin >> stock;
     cout << "Masukkan Harga Barang: ";
     cin >> harga;
     cout << "Masukkan Bunga per Hari (misal 0.01): ";
@@ -291,9 +448,12 @@ public:
     tJTempo.tm_year = tjy - 1900;
 
     Barang b(namaPenggadai, nama, nomorTransaksi, status, harga, tGadai,
-             tJTempo, bunga);
+             tJTempo, bunga, stock);
     tambahBarang(b);
-    cout << "\nBarang berhasil ditambahkan!\n\n";
+    cout << "\nBarang berhasil ditambahkan!\n";
+
+    // Pilih jenis pembayaran
+    pilihJenisPembayaran();
 
     // Tampilkan tabel barang di gudang setelah tambah
     tampilkanBarang();
@@ -311,7 +471,7 @@ int main() {
   tm tj1 = tg1;
   tj1.tm_mday = 4;
   Barang b1("SURYA PRIMA", "Air Cooler", "FPB-0001", "Di Gudang", 25000, tg1,
-            tj1, 0.1);
+            tj1, 0.1, 2);
   gudang.tambahBarang(b1);
 
   tm tg2 = {};
@@ -321,7 +481,7 @@ int main() {
   tm tj2 = tg2;
   tj2.tm_mday = 4;
   Barang b2("TEDY BATTERY", "Accu 150 Ampere Incco", "FPB-0002", "Keluar",
-            1400000, tg2, tj2, 0.1);
+            1400000, tg2, tj2, 0.1, 5);
   gudang.tambahBarang(b2);
 
   tm tg3 = {};
@@ -331,7 +491,7 @@ int main() {
   tm tj3 = tg3;
   tj3.tm_mday = 4;
   Barang b3("SURYA PRIMA", "Shock breaker", "FPB-0003", "Di Gudang", 500000,
-            tg3, tj3, 0.1);
+            tg3, tj3, 0.1, 1);
   gudang.tambahBarang(b3);
 
   tm tg4 = {};
@@ -341,7 +501,7 @@ int main() {
   tm tj4 = tg4;
   tj4.tm_mday = 4;
   Barang b4("INTERTRUCK PARTS", "Booster Rem MERCY", "FPB-0004", "Di Gudang",
-            1299450, tg4, tj4, 0.1);
+            1299450, tg4, tj4, 0.1, 3);
   gudang.tambahBarang(b4);
 
   tm tg5 = {};
@@ -351,7 +511,7 @@ int main() {
   tm tj5 = tg5;
   tj5.tm_mday = 4;
   Barang b5("JAYA MANDIRI DIESEL", "As Stang rem", "FPB-0005", "Di Gudang",
-            125000, tg5, tj5, 0.1);
+            125000, tg5, tj5, 0.1, 4);
   gudang.tambahBarang(b5);
 
   tm tg6 = {};
@@ -361,7 +521,7 @@ int main() {
   tm tj6 = tg6;
   tj6.tm_mday = 4;
   Barang b6("TEKNIKA COKRA", "Anting-Anting Rem", "FPB-0006", "Di Gudang",
-            395000, tg6, tj6, 0.1);
+            395000, tg6, tj6, 0.1, 2);
   gudang.tambahBarang(b6);
 
   tm tg7 = {};
@@ -371,7 +531,7 @@ int main() {
   tm tj7 = tg7;
   tj7.tm_mday = 4;
   Barang b7("MORO JAYA TEKNIK", "Adaptor 3/4 Male", "FPB-0007", "Di Gudang",
-            30000, tg7, tj7, 0.1);
+            30000, tg7, tj7, 0.1, 5);
   gudang.tambahBarang(b7);
 
   tm tg8 = {};
@@ -381,7 +541,7 @@ int main() {
   tm tj8 = tg8;
   tj8.tm_mday = 4;
   Barang b8("WANAJAYA BAN", "Ban Dalam 900-20 GT", "FPB-0008", "Di Gudang",
-            285000, tg8, tj8, 0.1);
+            285000, tg8, tj8, 0.1, 6);
   gudang.tambahBarang(b8);
 
   tm tg9 = {};
@@ -391,7 +551,7 @@ int main() {
   tm tj9 = tg9;
   tj9.tm_mday = 4;
   Barang b9("SURYA PRIMA", "Bohlam H4 BOSS", "FPB-0009", "Di Gudang", 30000,
-            tg9, tj9, 0.1);
+            tg9, tj9, 0.1, 8);
   gudang.tambahBarang(b9);
 
   tm tg10 = {};
@@ -401,7 +561,7 @@ int main() {
   tm tj10 = tg10;
   tj10.tm_mday = 4;
   Barang b10("TEKNIKA COKRA", "Dinamo Amper", "FPB-00010", "Di Gudang", 510000,
-             tg10, tj10, 0.1);
+             tg10, tj10, 0.1, 2);
   gudang.tambahBarang(b10);
 
   tm tg11 = {};
@@ -411,7 +571,7 @@ int main() {
   tm tj11 = tg11;
   tj11.tm_mday = 4;
   Barang b11("INTERTRUCK PARTS", "Filter Udara Besar Volvo", "FPB-00011",
-             "Di Gudang", 350000, tg11, tj11, 0.1);
+             "Di Gudang", 350000, tg11, tj11, 0.1, 7);
   gudang.tambahBarang(b11);
 
   tm tg12 = {};
@@ -421,7 +581,7 @@ int main() {
   tm tj12 = tg12;
   tj12.tm_mday = 4;
   Barang b12("SURYA PRIMA", "Air cooler", "FPB-00012", "Di Gudang", 25000, tg12,
-             tj12, 0.1);
+             tj12, 0.1, 1);
   gudang.tambahBarang(b12);
 
   tm tg13 = {};
@@ -431,7 +591,7 @@ int main() {
   tm tj13 = tg13;
   tj13.tm_mday = 4;
   Barang b13("SURYA PRIMA", "Bohlam H4 BOSS", "FPB-00013", "Di Gudang", 30000,
-             tg13, tj13, 0.1);
+             tg13, tj13, 0.1, 4);
   gudang.tambahBarang(b13);
 
   tm tg14 = {};
@@ -441,7 +601,7 @@ int main() {
   tm tj14 = tg14;
   tj14.tm_mday = 4;
   Barang b14("INTERTRUCK PARTS", "King Pin MERCY", "FPB-00014", "Di Gudang",
-             375000, tg14, tj14, 0.1);
+             375000, tg14, tj14, 0.1, 3);
   gudang.tambahBarang(b14);
 
   tm tg15 = {};
@@ -451,7 +611,7 @@ int main() {
   tm tj15 = tg15;
   tj15.tm_mday = 4;
   Barang b15("INTERTRUCK PARTS", "Kaca Spion mercy", "FPB-00015", "Di Gudang",
-             120000, tg15, tj15, 0.1);
+             120000, tg15, tj15, 0.1, 5);
   gudang.tambahBarang(b15);
 
   tm tg16 = {};
@@ -461,7 +621,7 @@ int main() {
   tm tj16 = tg16;
   tj16.tm_mday = 4;
   Barang b16("TEKNIKA COKRA", "Anting-Anting Rem", "FPB-00016", "Di Gudang",
-             395000, tg16, tj16, 0.1);
+             395000, tg16, tj16, 0.1, 6);
   gudang.tambahBarang(b16);
 
   tm tg17 = {};
@@ -471,7 +631,7 @@ int main() {
   tm tj17 = tg17;
   tj17.tm_mday = 4;
   Barang b17("TEDY BATTERY", "Accu 150 Ampere Incco", "FPB-00017", "Di Gudang",
-             1400000, tg17, tj17, 0.1);
+             1400000, tg17, tj17, 0.1, 1);
   gudang.tambahBarang(b17);
 
   tm tg18 = {};
@@ -481,7 +641,7 @@ int main() {
   tm tj18 = tg18;
   tj18.tm_mday = 4;
   Barang b18("WANAJAY BAN", "Ban Dalam 900-20GT", "FPB-00018", "Di Gudang",
-             285000, tg18, tj18, 0.1);
+             285000, tg18, tj18, 0.1, 7);
   gudang.tambahBarang(b18);
 
   tm tg19 = {};
@@ -491,7 +651,7 @@ int main() {
   tm tj19 = tg19;
   tj19.tm_mday = 4;
   Barang b19("INTERTRUCK PARTS", "Kaca Pintu LH VOLVO", "FPB-00019",
-             "Di Gudang", 385000, tg19, tj19, 0.1);
+             "Di Gudang", 385000, tg19, tj19, 0.1, 2);
   gudang.tambahBarang(b19);
 
   tm tg20 = {};
@@ -501,7 +661,7 @@ int main() {
   tm tj20 = tg20;
   tj20.tm_mday = 4;
   Barang b20("INTERTRUCK PARTS", "Filter Solar (BOSCH)", "FPB-00020",
-             "Di Gudang", 45000, tg20, tj20, 0.1);
+             "Di Gudang", 45000, tg20, tj20, 0.1, 9);
   gudang.tambahBarang(b20);
 
   int pilihan;
@@ -511,9 +671,10 @@ int main() {
     cout << "2. Tampilkan Barang di Gudang\n";
     cout << "3. Tampilkan Barang Keluar\n";
     cout << "4. Tampilkan Harga Barang\n";
-    cout << "5. Pilih Jenis Pembayaran\n";
-    cout << "6. Cari berdasarkan Nama Barang\n";
-    cout << "7. Cari berdasarkan Nomor Transaksi\n";
+    cout << "5. Tampilkan Stock Barang < 3\n";
+    cout << "6. Cari berdasarkan Nomor Transaksi\n";
+    cout << "7. Sorting Barang berdasarkan Jatuh Tempo\n";
+    cout << "8. Hapus Data berdasarkan Nomor Transaksi\n";
     cout << "0. Keluar\n";
     cout << "Pilih: ";
     cin >> pilihan;
@@ -532,20 +693,9 @@ int main() {
       gudang.tampilkanHargaBarang();
       break;
     case 5:
-      gudang.pilihJenisPembayaran();
+      gudang.tampilkanStockKurang();
       break;
     case 6: {
-      string namaBarang;
-      cin.ignore(); // flush buffer
-      cout << "Masukkan nama barang yang dicari: ";
-      getline(cin, namaBarang);
-      int result = gudang.linearSearchByName(namaBarang);
-      if (result != -1) {
-        gudang.tampilkanDetailBarang(result);
-      }
-      break;
-    }
-    case 7: {
       string nomorTransaksi;
       cin.ignore(); // flush buffer
       cout << "Masukkan nomor transaksi yang dicari: ";
@@ -553,6 +703,23 @@ int main() {
       int result = gudang.binarySearchByTransactionNumber(nomorTransaksi);
       if (result != -1) {
         gudang.tampilkanDetailBarang(result);
+      } else {
+        cout << "Data dengan nomor transaksi '" << nomorTransaksi << "' tidak ditemukan.\n";
+      }
+      break;
+    }
+    case 7:
+      gudang.sortingByJatuhTempo();
+      break;
+    case 8: {
+      string nomorTransaksi;
+      cin.ignore(); // flush buffer
+      cout << "Masukkan nomor transaksi yang akan dihapus: ";
+      getline(cin, nomorTransaksi);
+      if (gudang.hapusBarangByTransaksi(nomorTransaksi)) {
+        cout << "Data berhasil dihapus!\n";
+      } else {
+        cout << "Data dengan nomor transaksi '" << nomorTransaksi << "' tidak ditemukan.\n";
       }
       break;
     }
